@@ -1,0 +1,267 @@
+---
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+Libraries:
+
+```{r}
+library(dplyr)
+library(data.table)
+library(markovchain)
+library(diagram)
+library(expm)
+library(pracma)
+library(ggplot2)
+```
+
+Import CSV:
+
+```{r}
+cric=read.csv("cricket.csv",header=TRUE,sep=",")
+class(cric)
+cric
+```
+
+Pre-processing:
+
+```{r}
+cric=read.csv("cricket.csv",header=TRUE,sep=",")
+cric
+odi=cric[cric$Home == 'Bangladesh' | cric$Away == 'Bangladesh',]
+odi
+```
+
+Result:
+
+```{r}
+dataframe1<-odi%>%mutate(JoyBangla = case_when(Home == 'Bangladesh' & Winner == 'Bangladesh' ~ 'W', Away == 'Bangladesh' & Winner == 'Bangladesh' ~ 'W', Home == 'Bangladesh' & Winner == 'no result' ~ 'N/R', Away == 'Bangladesh' & Winner == 'no result' ~ 'N/R', Home == 'Bangladesh' & Winner != 'Bangladesh' & Winner != 'no result' ~ 'L', Away == 'Bangladesh' & Winner != 'Bangladesh' & Winner != 'no result' ~ 'L',))
+dataframe1
+score = dataframe1[c("JoyBangla")]
+score
+class(score)
+```
+
+Transitions of states (Win, Loss, No Result):
+
+```{r}
+w_w=0
+w_l=0
+w_nr=0
+
+l_w=0
+l_l=0
+l_nr=0
+
+nr_w=0
+nr_l=0
+nr_nr=0
+```
+
+Check till:
+
+```{r}
+total = lengths(score)-1
+total
+```
+
+Transition increment:
+
+```{r}
+for (i in 1:total){
+  
+  if (score[i,] == "W"){
+    
+    if(score[i+1,] == "W"){
+      w_w = w_w + 1
+    }
+    else if(score[i+1,] == "L"){
+      w_l = w_l + 1
+    }
+    else{
+      w_nr = w_nr + 1
+    }
+  }
+  
+  else if (score[i,] == "L"){
+    
+    if(score[i+1,] == "L"){
+      l_l = l_l + 1
+    }
+    else if(score[i+1,] == "W"){
+      l_w = l_w + 1
+    }
+    else{
+      l_nr = l_nr + 1
+    }
+  }
+  
+  else if (score[i,] == "N/R"){
+    
+    if(score[i+1,] == "N/R"){
+      nr_nr = nr_nr + 1
+    }
+    else if(score[i+1,] == "W"){
+      nr_w = nr_w + 1
+    }
+    else{
+      nr_l = nr_l + 1
+    }
+  }
+}
+```
+
+Total number of each transition:
+
+```{r}
+w_w
+w_l
+w_nr
+
+l_w
+l_l
+l_nr
+
+nr_w
+nr_l
+nr_nr
+```
+
+Encounters in each row:
+
+```{r}
+table(score$JoyBangla)
+count(filter(score,JoyBangla=="W"))
+count(filter(score,JoyBangla=="L"))
+count(filter(score,JoyBangla=="N/R"))
+
+win = w_w + w_l + w_nr
+loss = l_w + l_l + l_nr
+noresult = nr_w + nr_l + nr_nr
+```
+
+Transitional probabilities:
+
+```{r}
+p_w_w = w_w/win
+p_w_l = w_l/win
+p_w_nr = w_nr/win
+
+p_l_w = l_w/loss
+p_l_l = l_l/loss
+p_l_nr = l_nr/loss
+
+p_nr_w = nr_w/noresult
+p_nr_l = nr_l/noresult
+p_nr_nr = nr_nr/noresult
+
+p_w_w 
+p_w_l 
+p_w_nr 
+
+p_l_w 
+p_l_l 
+p_l_nr 
+
+p_nr_w
+p_nr_l
+p_nr_nr
+```
+
+Transitional Matrix:
+
+```{r}
+tmatrix<-round(matrix(c(p_w_w, p_w_l, p_w_nr, p_l_w, p_l_l, p_l_nr, p_nr_w, p_nr_l, p_nr_nr), nrow = 3, byrow = TRUE), 4)
+
+states = c("W","L","N/R")
+row.names(tmatrix)<-states 
+colnames(tmatrix)=states
+tmatrix
+```
+
+Applying Markov chain:
+
+```{r}
+final<-new("markovchain", transitionMatrix=tmatrix, states=c("W","L","N/R"), name="Markov Chain on Bangladesh ODI Record:")
+```
+
+Markov chain:
+
+```{r}
+final
+```
+
+State Diagram:
+
+```{r}
+plotmat(t(tmatrix),pos = c(2,1), 
+        lwd = 1, box.lwd = 2, 
+        cex.txt = 0.75, 
+        box.size = 0.10, 
+        box.type = "circle", 
+        box.prop = 0.75,
+        box.col = "green",
+        arr.length=.4,
+        arr.width=.2,
+        self.cex = .6,
+        self.shifty = -.01,
+        self.shiftx = .17,
+        main = "Succeeding match prediction:")
+```
+
+Commencing:
+
+```{r}
+startstate <- matrix(c(1,0,0), nrow=1, byrow=TRUE)
+```
+
+
+
+```{r}
+matchnum <- 1
+nextmatch <- round(startstate * final^matchnum, 1)
+nextmatch
+
+nextmatch <- round(tmatrix%^%matchnum, 1)
+nextmatch
+#plot
+plotmat(t(nextmatch),pos = c(2,1), 
+        lwd = 1, box.lwd = 2, 
+        cex.txt = 0.75, 
+        box.size = 0.10, 
+        box.type = "circle", 
+        box.prop = 0.75,
+        box.col = "green",
+        arr.length=.4,
+        arr.width=.2,
+        self.cex = .6,
+        self.shifty = -.01,
+        self.shiftx = .17,
+        main = "Succeeding match prediction:")
+```
+
+Succeeding match:
+
+```{r}
+matchnum <- 2
+thirdmatch <- round(startstate * final^matchnum, 1)
+thirdmatch
+
+thirdmatch <- round(tmatrix%^%matchnum, 1)
+thirdmatch
+
+plotmat(t(thirdmatch),pos = c(1,2), 
+        lwd = 1, box.lwd = 2, 
+        cex.txt = 0.75, 
+        box.size = 0.10, 
+        box.type = "circle", 
+        box.prop = 0.75,
+        box.col = "green",
+        arr.length=.4,
+        arr.width=.2,
+        self.cex = .6,
+        self.shifty = -.01,
+        self.shiftx = .14,
+        main = "Third match prediction:")
+```
